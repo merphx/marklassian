@@ -642,3 +642,208 @@ function inlineToAdf(tokens?: RelaxedToken[]): AdfNode[] {
       return true;
     });
 }
+
+/**
+ * Converts an array of inline ADF nodes to a Markdown string, applying
+ * marks inside-out.
+ */
+function inlineNodesToMarkdown(nodes?: AdfNode[]): string {
+  if (!nodes) return "";
+  return nodes
+    .map((node) => {
+      if (node.type === "hardBreak") return "  \n";
+      if (node.type !== "text") {
+        // Unknown inline node — fall back to <adf> passthrough
+        return `<adf>${JSON.stringify(node)}</adf>`;
+      }
+      let text = node.text ?? "";
+      const marks = node.marks ?? [];
+      const hasCode = marks.some((m) => m.type === "code");
+      const hasStrike = marks.some((m) => m.type === "strike");
+      const hasEm = marks.some((m) => m.type === "em");
+      const hasStrong = marks.some((m) => m.type === "strong");
+      const linkMark = marks.find((m) => m.type === "link");
+      // Apply marks inside-out: code → strike → em → strong → link
+      if (hasCode) text = `\`${text}\``;
+      if (hasStrike) text = `~~${text}~~`;
+      if (hasEm) text = `*${text}*`;
+      if (hasStrong) text = `**${text}**`;
+      if (linkMark) text = `[${text}](${linkMark.attrs?.href ?? ""})`;
+      return text;
+    })
+    .join("");
+}
+
+/**
+ * Renders a listItem node with the given indent and prefix (e.g. "- " or "1. ").
+ */
+function listItemToMarkdown(
+  item: AdfNode,
+  indent: number,
+  prefix: string,
+): string {
+  const pad = " ".repeat(indent);
+  const lines: string[] = [];
+  for (const child of item.content ?? []) {
+    if (child.type === "paragraph") {
+      lines.push(`${pad}${prefix}${inlineNodesToMarkdown(child.content)}`);
+    } else if (
+      child.type === "bulletList" ||
+      child.type === "orderedList" ||
+      child.type === "taskList"
+    ) {
+      lines.push(blockNodeToMarkdown(child, indent + 2));
+    }
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Renders a taskItem node with the appropriate checkbox prefix.
+ */
+function taskItemToMarkdown(item: AdfNode, indent: number): string {
+  const pad = " ".repeat(indent);
+  const checked = item.attrs?.state === "DONE";
+  const checkbox = checked ? "- [x] " : "- [ ] ";
+  const lines: string[] = [];
+  // taskItem content is inline nodes directly (no paragraph wrapper)
+  const inlineContent = (item.content ?? []).filter(
+    (c) => c.type === "text" || c.type === "hardBreak",
+  );
+  const nestedLists = (item.content ?? []).filter(
+    (c) =>
+      c.type === "bulletList" ||
+      c.type === "orderedList" ||
+      c.type === "taskList",
+  );
+  lines.push(`${pad}${checkbox}${inlineNodesToMarkdown(inlineContent)}`);
+  for (const nested of nestedLists) {
+    lines.push(blockNodeToMarkdown(nested, indent + 2));
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Converts an array of block ADF nodes to Markdown, joining blocks with a
+ * blank line.
+ */
+function blockNodesToMarkdown(nodes: AdfNode[], indent = 0): string {
+  return nodes
+    .map((node) => blockNodeToMarkdown(node, indent))
+    .filter((s) => s !== "")
+    .join("\n\n");
+}
+
+/**
+ * Converts a single block ADF node to a Markdown string. Unknown node types
+ * fall back to an <adf> passthrough block.
+ */
+function blockNodeToMarkdown(node: AdfNode, indent = 0): string {
+  switch (node.type) {
+    case "heading": {
+      const level = node.attrs?.level ?? 1;
+      return `${"#".repeat(level)} ${inlineNodesToMarkdown(node.content)}`;
+    }
+
+    case "paragraph":
+      return inlineNodesToMarkdown(node.content);
+
+    case "blockquote": {
+      const inner = blockNodesToMarkdown(node.content ?? []);
+      return inner
+        .split("\n")
+        .map((line) => `> ${line}`)
+        .join("\n");
+    }
+
+    case "bulletList":
+      return (node.content ?? [])
+        .map((item) => listItemToMarkdown(item, indent, "- "))
+        .join("\n");
+
+    case "orderedList": {
+      const start = node.attrs?.order ?? 1;
+      return (node.content ?? [])
+        .map((item, i) => listItemToMarkdown(item, indent, `${start + i}. `))
+        .join("\n");
+    }
+
+    case "taskList":
+      return (node.content ?? [])
+        .map((item) => taskItemToMarkdown(item, indent))
+        .join("\n");
+
+    case "codeBlock": {
+      // Atlassian does not support nested code block macros, so an extended
+      // fence will not arise from Confluence content in practice. This is a
+      // defensive measure for content created outside Confluence.
+      // Note: markdownToAdf does not preserve fence depth in ADF, so the
+      // MD→ADF direction cannot mirror this behavior.
+      //
+      // Per the CommonMark spec (and marked's implementation), only a line
+      // consisting entirely of backticks can close a fenced code block — a
+      // backtick sequence embedded mid-line is safe and does not need to be
+      // accounted for here.
+      const text = node.content?.[0]?.text ?? "";
+      const longestBacktickLine = (
+        text.match(/^`+$/gm) ?? ([] as string[])
+      ).reduce((max: number, s: string) => Math.max(max, s.length), 0);
+      const fenceLength = Math.max(3, longestBacktickLine + 1);
+      const fence = "`".repeat(fenceLength);
+      const lang =
+        node.attrs?.language && node.attrs.language !== "text"
+          ? node.attrs.language
+          : "";
+      return `${fence}${lang}\n${text}\n${fence}`;
+    }
+
+    case "table": {
+      const rows = node.content ?? [];
+      const output: string[] = [];
+      let separatorEmitted = false;
+      for (const row of rows) {
+        const cells = row.content ?? [];
+        const isHeaderRow =
+          cells.length > 0 && cells[0]?.type === "tableHeader";
+        const cellTexts = cells.map((cell) => {
+          const content = blockNodesToMarkdown(cell.content ?? []).trim();
+          return content || " ";
+        });
+        output.push(`| ${cellTexts.join(" | ")} |`);
+        if (isHeaderRow && !separatorEmitted) {
+          output.push(`| ${cells.map(() => "---").join(" | ")} |`);
+          separatorEmitted = true;
+        }
+      }
+      return output.join("\n");
+    }
+
+    case "mediaSingle": {
+      const media = (node.content ?? []).find((c) => c.type === "media");
+      if (!media) return "";
+      return blockNodeToMarkdown(media, indent);
+    }
+
+    case "media":
+      return `![${node.attrs?.alt ?? ""}](${node.attrs?.url ?? ""})`;
+
+    case "rule":
+      return "---";
+
+    default:
+      return `<adf>${JSON.stringify(node)}</adf>`;
+  }
+}
+
+/**
+ * Converts an Atlassian Document Format (ADF) document or node array to
+ * GitHub-flavored Markdown.
+ *
+ * Never throws. Input is assumed to be trusted Atlassian API output. Unknown
+ * node types are serialized as <adf> passthrough blocks so they survive the
+ * round-trip losslessly. Missing or malformed fields fall back to safe defaults.
+ */
+export function adfToMarkdown(adf: AdfDocument | AdfNode[]): string {
+  const nodes = Array.isArray(adf) ? adf : (adf.content ?? []);
+  return blockNodesToMarkdown(nodes);
+}
