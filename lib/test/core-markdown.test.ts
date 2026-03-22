@@ -81,7 +81,14 @@ echo "Hello World"
 
 \`\`\`
 Some text
-\`\`\``;
+\`\`\`
+
+\`\`\`\`markdown
+An example:
+\`\`\`
+code here
+\`\`\`
+\`\`\`\``;
 
   const adf = await markdownToAdf(markdown);
   t.deepEqual(adf, codeBlocksAdf);

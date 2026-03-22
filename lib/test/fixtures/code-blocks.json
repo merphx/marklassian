@@ -37,6 +37,18 @@
           "text": "Some text"
         }
       ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "markdown"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "An example:\n```\ncode here\n```"
+        }
+      ]
     }
   ]
 }
