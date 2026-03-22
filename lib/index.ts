@@ -692,7 +692,7 @@ function listItemToMarkdown(
       child.type === "orderedList" ||
       child.type === "taskList"
     ) {
-      lines.push(blockNodeToMarkdown(child, indent + 2));
+      lines.push(blockNodeToMarkdown(child, indent + prefix.length));
     }
   }
   return lines.join("\n");
@@ -806,7 +806,9 @@ function blockNodeToMarkdown(node: AdfNode, indent = 0): string {
         const isHeaderRow =
           cells.length > 0 && cells[0]?.type === "tableHeader";
         const cellTexts = cells.map((cell) => {
-          const content = blockNodesToMarkdown(cell.content ?? []).trim();
+          const content = blockNodesToMarkdown(cell.content ?? [])
+            .replace(/\n+/g, " ")
+            .trim();
           return content || " ";
         });
         output.push(`| ${cellTexts.join(" | ")} |`);
@@ -831,7 +833,7 @@ function blockNodeToMarkdown(node: AdfNode, indent = 0): string {
       return "---";
 
     default:
-      return `<adf>${JSON.stringify(node)}</adf>`;
+      return `<adf>\n${JSON.stringify(node)}\n</adf>`;
   }
 }
 
