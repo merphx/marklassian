@@ -663,6 +663,13 @@ function inlineNodesToMarkdown(nodes?: AdfNode[]): string {
       const hasEm = marks.some((m) => m.type === "em");
       const hasStrong = marks.some((m) => m.type === "strong");
       const linkMark = marks.find((m) => m.type === "link");
+      // Escape Markdown-special characters in plain (unmarked) text so they
+      // survive a round-trip through markdownToAdf without being interpreted
+      // as formatting. Characters inside marks are already wrapped in their
+      // own delimiters and must not be double-escaped.
+      if (marks.length === 0) {
+        text = text.replace(/[\\*_`~\[]/g, "\\$&");
+      }
       // Apply marks inside-out: code → strike → em → strong → link
       if (hasCode) text = `\`${text}\``;
       if (hasStrike) text = `~~${text}~~`;

@@ -25,6 +25,9 @@ import gfmNestedTaskListAdf from "./fixtures/gfm-nested-task-list.json" with {
 import adfPassthroughAdf from "./fixtures/adf-passthrough.json" with {
   type: "json",
 };
+import specialCharsSimpleAdf from "./fixtures/special-chars-simple.json" with {
+  type: "json",
+};
 
 const test = anyTest as unknown as TestFn<void>;
 
@@ -629,6 +632,183 @@ test("mediaSingle with no media child returns empty string", (t) => {
 });
 
 // ---------------------------------------------------------------------------
+// Special character escaping (plain text — no marks)
+// ---------------------------------------------------------------------------
+
+test("plain asterisk is escaped so it does not become italic", (t) => {
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "*" },
+          { type: "text", text: "not bold" },
+          { type: "text", text: "*" },
+        ],
+      },
+    ],
+  });
+  t.is(result, "\\*not bold\\*");
+});
+
+test("plain asterisk round-trips losslessly", (t) => {
+  const original = {
+    version: 1 as const,
+    type: "doc" as const,
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "*" },
+          { type: "text", text: "not bold" },
+          { type: "text", text: "*" },
+        ],
+      },
+    ],
+  };
+  const md = adfToMarkdown(original);
+  const roundTripped = markdownToAdf(md);
+  t.deepEqual(roundTripped, original);
+});
+
+test("plain underscore is escaped so it does not become italic", (t) => {
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "_" },
+          { type: "text", text: "not italic" },
+          { type: "text", text: "_" },
+        ],
+      },
+    ],
+  });
+  t.is(result, "\\_not italic\\_");
+});
+
+test("plain underscore round-trips losslessly", (t) => {
+  const original = {
+    version: 1 as const,
+    type: "doc" as const,
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "_" },
+          { type: "text", text: "not italic" },
+          { type: "text", text: "_" },
+        ],
+      },
+    ],
+  };
+  const md = adfToMarkdown(original);
+  const roundTripped = markdownToAdf(md);
+  t.deepEqual(roundTripped, original);
+});
+
+test("plain backtick is escaped so it does not become code", (t) => {
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "`" },
+          { type: "text", text: "not code" },
+          { type: "text", text: "`" },
+        ],
+      },
+    ],
+  });
+  t.is(result, "\\`not code\\`");
+});
+
+test("plain backtick round-trips losslessly", (t) => {
+  const original = {
+    version: 1 as const,
+    type: "doc" as const,
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "`" },
+          { type: "text", text: "not code" },
+          { type: "text", text: "`" },
+        ],
+      },
+    ],
+  };
+  const md = adfToMarkdown(original);
+  const roundTripped = markdownToAdf(md);
+  t.deepEqual(roundTripped, original);
+});
+
+test("plain tilde pairs are escaped so they do not become strikethrough", (t) => {
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "~~not strike~~" }],
+      },
+    ],
+  });
+  t.is(result, "\\~\\~not strike\\~\\~");
+});
+
+test("plain backslash is escaped", (t) => {
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "a\\b" }],
+      },
+    ],
+  });
+  t.is(result, "a\\\\b");
+});
+
+test("plain open bracket is escaped so it does not start a link", (t) => {
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "[not a link]" }],
+      },
+    ],
+  });
+  t.is(result, "\\[not a link]");
+});
+
+test("marked text is not double-escaped", (t) => {
+  // A strong node containing an asterisk character should produce ***** (not **\****)
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "*bold*", marks: [{ type: "strong" }] },
+        ],
+      },
+    ],
+  });
+  t.is(result, "***bold***");
+});
+
+// ---------------------------------------------------------------------------
 // Section 2: Round-trip tests
 // ---------------------------------------------------------------------------
 
@@ -661,10 +841,10 @@ test(roundTripMacro, basicsAdf, "basics");
 test(roundTripMacro, codeBlocksAdf, "code-blocks");
 test(roundTripMacro, inlineCodeAdf, "inline-code-marks");
 test(roundTripMacro, nestedListAdf, "nested-list");
-// special-chars is excluded: the fixture contains escaped Markdown characters
-// that markdownToAdf stores as structural marks (em/strong), losing the escape
-// information. adfToMarkdown cannot reconstruct the escapes, so the round-trip
-// is not achievable for this fixture.
+// special-chars is excluded: the full fixture contains em-marked asterisk/underscore
+// characters (e.g. italic "*") that have no lossless Markdown representation.
+// special-chars-simple covers all the round-trippable patterns from that fixture.
+test(roundTripMacro, specialCharsSimpleAdf, "special-chars-simple");
 test(roundTripMacro, tableAdf, "table");
 test(roundTripMacro, textEdgeCasesAdf, "text-edge-cases");
 test(roundTripMacro, gfmTaskListAdf, "gfm-task-list");
