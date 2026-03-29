@@ -25,9 +25,6 @@ import gfmNestedTaskListAdf from "./fixtures/gfm-nested-task-list.json" with {
 import adfPassthroughAdf from "./fixtures/adf-passthrough.json" with {
   type: "json",
 };
-import specialCharsSimpleAdf from "./fixtures/special-chars-simple.json" with {
-  type: "json",
-};
 
 const test = anyTest as unknown as TestFn<void>;
 
@@ -874,10 +871,7 @@ test(roundTripMacro, basicsAdf, "basics");
 test(roundTripMacro, codeBlocksAdf, "code-blocks");
 test(roundTripMacro, inlineCodeAdf, "inline-code-marks");
 test(roundTripMacro, nestedListAdf, "nested-list");
-// special-chars is excluded: the full fixture contains em-marked asterisk/underscore
-// characters (e.g. italic "*") that have no lossless Markdown representation.
-// special-chars-simple covers all the round-trippable patterns from that fixture.
-test(roundTripMacro, specialCharsSimpleAdf, "special-chars-simple");
+test(roundTripMacro, specialCharsAdf, "special-chars");
 test(roundTripMacro, tableAdf, "table");
 test(roundTripMacro, textEdgeCasesAdf, "text-edge-cases");
 test(roundTripMacro, gfmTaskListAdf, "gfm-task-list");

@@ -765,8 +765,13 @@ function blockNodeToMarkdown(node: AdfNode, indent = 0): string {
       return `${"#".repeat(level)} ${inlineNodesToMarkdown(node.content)}`;
     }
 
-    case "paragraph":
-      return inlineNodesToMarkdown(node.content);
+    case "paragraph": {
+      const text = inlineNodesToMarkdown(node.content);
+      // A paragraph whose rendered text starts with "# " (one or more hashes
+      // followed by a space) would be re-parsed as a heading on round-trip.
+      // Escape the leading # to prevent that.
+      return text.replace(/^(#+) /, "\\$1 ");
+    }
 
     case "blockquote": {
       const inner = blockNodesToMarkdown(node.content ?? []);
