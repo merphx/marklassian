@@ -40,11 +40,9 @@ Plain text nodes containing `*`, `_`, `` ` ``, `~`, `\`, `[` were not escaped, c
 
 **New unit tests:** individual assertion + round-trip test for each escape pattern (`*`, `_`, `` ` ``, `~~`, `\`, `[`), plus a "marked text is not double-escaped" guard.
 
-### 5b: Special characters — complex cases (em-marked `*`/`_`) 🔲 TODO
+### 5b: Special characters — complex cases (em-marked `*`/`_`) ✅ DONE
 
-The original `special-chars.json` contains patterns like `["*" plain, "not bold" em, "*" em]` — an asterisk character that is itself italic. There is no lossless Markdown representation of an italic asterisk character.
-
-**Approach:** Once a solution is found, remove `special-chars-simple.json`, update `special-chars.json` to use the corrected representation, and enable `round-trip: special-chars` in the macro suite.
+Fixed `inlineNodesToMarkdown` to escape `*` and `_` in marked (em/strong) text nodes. Fixed `blockNodeToMarkdown` paragraph case to escape a leading `#` character to prevent round-trip as a heading. Removed `special-chars-simple.json` (redundant). Updated `special-chars.json` fixture with self-documenting hash edge-case paragraphs. Round-trip test for full `special-chars` fixture enabled and passing.
 
 ### 5c: Tables — complex cell content 🔲 TODO
 
