@@ -663,14 +663,27 @@ function inlineNodesToMarkdown(nodes?: AdfNode[]): string {
       const hasEm = marks.some((m) => m.type === "em");
       const hasStrong = marks.some((m) => m.type === "strong");
       const linkMark = marks.find((m) => m.type === "link");
-      // Escape Markdown-special characters in plain (unmarked) text so they
-      // survive a round-trip through markdownToAdf without being interpreted
-      // as formatting. Characters inside marks are already wrapped in their
-      // own delimiters and must not be double-escaped.
+      // Escape Markdown-special characters so they survive a round-trip
+      // through markdownToAdf without being interpreted as formatting.
+      // We always escape the raw text content, whether or not marks are
+      // present — a marked node like bold "*bold*" must escape the inner
+      // asterisks to avoid them being interpreted as italic delimiters when
+      // the bold wrapping is applied.
+      // Trade-off: the emitted Markdown may not exactly match any original
+      // Markdown source (e.g. bold+italic "text" always emits ***text***
+      // regardless of which delimiter pair was used originally), but it
+      // guarantees a lossless ADF → MD → ADF round-trip, which is the
+      // contract we care about.
       if (marks.length === 0) {
         text = text.replace(/[\\*_`~\[]/g, "\\$&");
+      } else {
+        // Inside a mark, only escape * and _ — these are the characters that
+        // can form unintended emphasis delimiters when the mark wrapper is
+        // applied. Other special characters (`, ~, \, [) are already safely
+        // contained within the outer mark delimiters.
+        text = text.replace(/[*_]/g, "\\$&");
       }
-      // Apply marks inside-out: code → strike → em → strong → link
+      // Apply marks inside-out: code → strike → em → strong → link.
       if (hasCode) text = `\`${text}\``;
       if (hasStrike) text = `~~${text}~~`;
       if (hasEm) text = `*${text}*`;

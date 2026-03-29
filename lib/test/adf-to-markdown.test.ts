@@ -791,8 +791,41 @@ test("plain open bracket is escaped so it does not start a link", (t) => {
   t.is(result, "\\[not a link]");
 });
 
-test("marked text is not double-escaped", (t) => {
-  // A strong node containing an asterisk character should produce ***** (not **\****)
+// Two scenarios for marked text containing Markdown-special characters:
+//
+// Scenario A — separate text nodes (structure produced by markdownToAdf):
+//   markdownToAdf splits escaped chars into individual text nodes, so bold
+//   asterisks arrive as three separate strong nodes: "*", "bold", "*".
+//   Each node is emitted independently; the asterisk content is escaped
+//   inside the ** delimiters → **\*****bold*****\*** which round-trips back
+//   to the original three-node structure.
+//
+// Scenario B — single text node (structure loaded directly from Confluence):
+//   Confluence may store bold-asterisk content as a single node with text
+//   "*bold*". The asterisks must be escaped inside the ** delimiters so they
+//   are not interpreted as italic markers → **\*bold\***. This also
+//   round-trips losslessly (markdownToAdf splits it into three strong nodes,
+//   which is an equivalent ADF representation of the same content).
+
+test("marked text — separate asterisk nodes (from markdownToAdf)", (t) => {
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "*", marks: [{ type: "strong" }] },
+          { type: "text", text: "bold", marks: [{ type: "strong" }] },
+          { type: "text", text: "*", marks: [{ type: "strong" }] },
+        ],
+      },
+    ],
+  });
+  t.is(result, "**\\*****bold****\\***");
+});
+
+test("marked text — asterisks inline in single node (from Confluence)", (t) => {
   const result = adfToMarkdown({
     version: 1,
     type: "doc",
@@ -805,7 +838,7 @@ test("marked text is not double-escaped", (t) => {
       },
     ],
   });
-  t.is(result, "***bold***");
+  t.is(result, "**\\*bold\\***");
 });
 
 // ---------------------------------------------------------------------------
