@@ -145,7 +145,10 @@ Ellipsis: Wait... for it…
 Literal asterisks: \\*not bold\\*, \\**not bold\\**
 Literal underscores: \\_not italic\\_, \\__not bold\\__
 Literal backticks: \\\`not code\\\`
-Literal hash: \\# not heading
+
+\\# escaped hash at line start (not a heading)
+
+#hashtag-style (no space, not a heading)
 
 ## Mixed Content
 **Bold with émojis: 🔥 café** and *italic with symbols: α±β*

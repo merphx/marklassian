@@ -233,18 +233,28 @@
         {
           "type": "text",
           "text": "`"
-        },
-        {
-          "type": "text",
-          "text": " Literal hash: "
-        },
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
         {
           "type": "text",
           "text": "#"
         },
         {
           "type": "text",
-          "text": " not heading"
+          "text": " escaped hash at line start (not a heading)"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "#hashtag-style (no space, not a heading)"
         }
       ]
     },
