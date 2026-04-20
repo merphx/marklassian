@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Unify `adfToMarkdown` to emit inline `<adf>` tags exclusively, add test coverage for inline `<adf>` in single-line Markdown elements (headings, list items, table cells), implement table cell complex-content fallback, and cover ordered list items 99/100.
+**Goal:** Add test coverage for inline `<adf>` in single-line Markdown elements (headings, list items, table cells), implement table cell complex-content fallback, and cover ordered list items 99/100.
 
-**Architecture:** Three changes to `lib/index.ts`: (1) change block fallback from `<adf>\n…\n</adf>` to `<adf>…</adf>`, (2) replace inline cell-rendering logic with a `cellContentToMarkdown` helper that wraps non-paragraph block nodes in `<adf>…</adf>` tags, (3) no changes needed for inline fallback (already uses `<adf>…</adf>`). Tests expand `adf-to-markdown.test.ts` and add fixtures.
+**Architecture:** The block (`<adf>\n…\n</adf>`) and inline (`<adf>…</adf>`) tag formats are intentionally different and must stay that way — a bare inline tag gets wrapped in a `paragraph` by marked, whereas a block tag is inserted directly as a doc child (see `lib/test/adf-passthrough.test.ts`). The main change is replacing the table cell rendering logic with a `cellContentToMarkdown` helper that renders block-level cell content as inline `<adf>` tags (correct, since table cells are an inline context). Tests expand `adf-to-markdown.test.ts`.
 
 **Tech Stack:** TypeScript, AVA 6, `tsimp`, ESM modules. No new dependencies.
 
-**Context:** This plan continues work from `docs/superpowers/plans/2026-03-23-adf-to-markdown.md`. Tasks 0–5b are complete and committed on branch `feat/adf-to-markdown`. This plan covers the remaining incomplete tasks (5c, 5d) plus the new inline-tag work.
+**Context:** Tasks 0–5b from the previous phase are complete and committed on branch `feat/adf-to-markdown`. This plan covers the remaining incomplete tasks (5c, 5d) plus the new inline-tag coverage work.
 
 ---
 
@@ -16,98 +16,21 @@
 
 | File | Change |
 |---|---|
-| `lib/index.ts` | Modify `blockNodeToMarkdown` default case; add `cellContentToMarkdown` helper; update table cell loop to use helper |
-| `lib/test/adf-to-markdown.test.ts` | Update `"unknown block node falls back to adf tag"` assertion; add inline-`<adf>`-in-heading/list/cell tests; add 100-item ordered list test |
-| `lib/test/fixtures/nested-list.json` | No change needed — triple-digit list test uses inline ADF, not a fixture |
+| `lib/index.ts` | Add `cellContentToMarkdown` helper; update table cell loop to use it |
+| `lib/test/adf-to-markdown.test.ts` | Add inline-`<adf>`-in-heading/list/cell tests; add triple-digit ordered list test |
 
 ---
 
-## Task 1: Switch block fallback to inline `<adf>` format
-
-**Files:**
-- Modify: `lib/index.ts:860-861`
-- Modify: `lib/test/adf-to-markdown.test.ts:577-585`
-
-The current block default emits a multi-line tag. The inline extension in `markdownToAdf` already handles single-line tags, and `parseAdfTag` trims content before parsing, so the round-trip is identical. Switching to inline format also avoids the newline-collapse bug in table cells (current code calls `.replace(/\n+/g, " ")` on cell content — a multi-line `<adf>` tag in a cell gets mangled; inline style survives intact).
-
-- [ ] **Step 1: Update the unit test assertion to expect inline format**
-
-In `lib/test/adf-to-markdown.test.ts`, find the test `"unknown block node falls back to adf tag"` (line 577) and change the assertion:
-
-```typescript
-// Before:
-t.is(result, `<adf>\n${JSON.stringify(node)}\n</adf>`);
-
-// After:
-t.is(result, `<adf>${JSON.stringify(node)}</adf>`);
-```
-
-- [ ] **Step 2: Run the test to confirm it fails**
-
-```bash
-cd lib && npx ava test/adf-to-markdown.test.ts -- "unknown block node falls back to adf tag"
-```
-
-Expected: FAIL — assertion mismatch (result has newlines, expected does not).
-
-- [ ] **Step 3: Change the block fallback in `lib/index.ts`**
-
-At line 861, change:
-
-```typescript
-// Before:
-default:
-  return `<adf>\n${JSON.stringify(node)}\n</adf>`;
-
-// After:
-default:
-  return `<adf>${JSON.stringify(node)}</adf>`;
-```
-
-- [ ] **Step 4: Verify single-line `<adf>` block parsing works**
-
-`<adf>` is not a known HTML tag name, so marked uses its rule 7 (a complete HTML tag on its own line, preceded and followed by a blank line) to tokenize it as an `html` block token. The existing tests in `adf-passthrough.test.ts` use only the multi-line form. Add a test to `lib/test/adf-passthrough.test.ts` to cover the single-line form:
-
-```typescript
-test("passes through a minimal ADF node using single-line (inline-style) tag", (t) => {
-  t.deepEqual(markdownToAdf('<adf>{"type":"rule"}</adf>'), {
-    version: 1,
-    type: "doc",
-    content: [{ type: "rule" }],
-  });
-});
-```
-
-Run: `cd lib && npx ava test/adf-passthrough.test.ts -- "single-line"`
-Expected: PASS. If this fails, investigate marked's block HTML tokenizer before proceeding — the rest of Task 1 depends on this behaviour.
-
-- [ ] **Step 5: Run the full test suite**
-
-```bash
-cd lib && npm test
-```
-
-Expected: all tests pass. The `round-trip: adf-passthrough` test will pass because `parseAdfTag` handles both formats — the intermediate Markdown changes but the round-trip result is identical.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add lib/index.ts lib/test/adf-to-markdown.test.ts
-git commit
-```
-
----
-
-## Task 2: Test inline `<adf>` tags in single-line Markdown elements
+## Task 1: Test inline `<adf>` tags in single-line Markdown elements
 
 **Files:**
 - Modify: `lib/test/adf-to-markdown.test.ts`
 
 These tests verify that an unknown inline node (which `adfToMarkdown` emits as `<adf>…</adf>`) embedded within headings, list items, blockquotes, and table cells survives a full ADF→MD→ADF round-trip. They also serve as regression tests for the inline-tag-in-block-context parsing path in `markdownToAdf`.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the tests**
 
-Add to the unit tests section of `lib/test/adf-to-markdown.test.ts` (after the `"unknown inline node falls back to adf tag"` test, around line 600):
+Add to the unit tests section of `lib/test/adf-to-markdown.test.ts` (after the `"unknown inline node falls back to adf tag"` test, around line 587):
 
 ```typescript
 test("unknown inline node in heading falls back to inline adf tag", (t) => {
@@ -258,15 +181,15 @@ test("round-trip: unknown inline node in bullet list item", (t) => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to confirm they pass (they should pass already)**
+- [ ] **Step 2: Run the tests**
 
-These tests exercise existing behaviour — inline nodes in headings/list items already go through `inlineNodesToMarkdown` which already emits `<adf>…</adf>`. The tests should pass without code changes.
+These exercise existing behaviour — inline nodes in headings/list items already go through `inlineNodesToMarkdown` which emits `<adf>…</adf>`. They should pass without code changes.
 
 ```bash
-cd lib && npx ava test/adf-to-markdown.test.ts -- "unknown inline node in heading"
+cd lib && npx ava test/adf-to-markdown.test.ts -- "unknown inline node in"
 ```
 
-Expected: PASS (or FAIL if there's a subtle issue — investigate before continuing).
+Expected: all PASS. If any fail, investigate before continuing.
 
 - [ ] **Step 3: Run the full test suite**
 
@@ -285,16 +208,16 @@ git commit
 
 ---
 
-## Task 3: Table cells — complex content fallback (task 5c)
+## Task 2: Table cells — complex content fallback (task 5c)
 
 **Files:**
 - Modify: `lib/index.ts` (add `cellContentToMarkdown` helper; update table case)
 - Modify: `lib/test/adf-to-markdown.test.ts`
 
-GFM table cells support inline content only. Cells with block-level nodes (bullet lists, code blocks, multiple paragraphs) cannot be represented natively. The fix: detect block-level content in a cell and emit each block node as `<adf>…</adf>` inline within the cell text, which survives the `markdownToAdf` inline parser.
+GFM table cells support inline content only. Cells with block-level nodes (bullet lists, code blocks, multiple paragraphs) cannot be represented natively. The fix: detect block-level content in a cell and emit each block node as an inline `<adf>` tag. This is correct because table cells are an inline context — the inline tag round-trips back through `markdownToAdf`'s `adf_inline` extension inside the cell's inline token stream.
 
-A "simple" cell has a single paragraph with only inline content — render via `inlineNodesToMarkdown`.
-A "complex" cell has any other structure — render each block node: paragraphs inline, others as `<adf>…</adf>`.
+A "simple" cell has a single paragraph — render via `inlineNodesToMarkdown`.
+A "complex" cell has any other structure — render paragraphs inline, `mediaSingle` as `![…](…)`, other block nodes as `<adf>…</adf>`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -332,7 +255,6 @@ test("table cell with bullet list falls back to inline adf tag", (t) => {
       },
     ],
   });
-  // Cell with a bullet list → inline <adf> tag
   t.is(result, `| Col |\n| --- |\n| <adf>${JSON.stringify(list)}</adf> |`);
 });
 
@@ -428,7 +350,8 @@ Insert this function before `blockNodeToMarkdown` (around line 760):
  * A "simple" cell (single paragraph) renders its inline content directly.
  * A "complex" cell (multiple block nodes, or non-paragraph block nodes)
  * renders paragraphs and mediaSingle nodes inline; other block nodes are
- * wrapped in <adf> tags. All parts joined with a single space.
+ * wrapped in inline <adf> tags (correct since table cells are an inline
+ * context). All parts joined with a single space.
  */
 function cellContentToMarkdown(cellContent: AdfNode[]): string {
   if (cellContent.length === 0) return " ";
@@ -452,6 +375,7 @@ function cellContentToMarkdown(cellContent: AdfNode[]): string {
       return "";
     }
     // Block-level node that can't be inlined — emit as inline <adf> tag.
+    // Table cells are an inline context, so the inline form is correct here.
     return `<adf>${JSON.stringify(node)}</adf>`;
   });
 
@@ -486,7 +410,7 @@ cd lib && npx ava test/adf-to-markdown.test.ts -- "table cell"
 
 Expected: all three new "table cell" tests PASS.
 
-Note: complex cells (bullet lists, multiple paragraphs) are intentionally lossy — no fixture needed. The `<adf>` inline tags in cells survive the round-trip, but `markdownToAdf` wraps them in a `paragraph` node rather than restoring the original cell structure. This is a documented limitation.
+Note: complex cells (bullet lists, multiple paragraphs) are intentionally lossy — `markdownToAdf` wraps the `<adf>` inline tags in a `paragraph` node rather than restoring the original cell structure. This is a documented limitation of the GFM table format.
 
 - [ ] **Step 6: Run the full test suite**
 
@@ -504,7 +428,8 @@ git commit
 ```
 
 ---
-## Task 4: Ordered list items 99 and 100 (task 5d)
+
+## Task 3: Ordered list items 99 and 100 (task 5d)
 
 **Files:**
 - Modify: `lib/test/adf-to-markdown.test.ts`
@@ -552,7 +477,7 @@ git commit
 
 ---
 
-## Task 5: Final verification and finishing
+## Task 4: Final verification and finishing
 
 - [ ] **Step 1: Run the full test suite**
 
@@ -574,7 +499,6 @@ Expected: build succeeds, no TypeScript errors. Check `lib/dist/index.d.ts` incl
 
 ```bash
 git rm docs/superpowers/specs/2026-03-23-adf-to-markdown-design.md \
-       docs/superpowers/plans/2026-03-23-adf-to-markdown.md \
        docs/superpowers/plans/2026-04-20-adf-inline-tags-and-table-cells.md
 git commit
 ```
