@@ -4,7 +4,7 @@
 
 **Goal:** Add test coverage for inline `<adf>` in single-line Markdown elements (headings, list items, table cells), implement table cell complex-content fallback, and cover ordered list items 99/100.
 
-**Architecture:** The block (`<adf>\n…\n</adf>`) and inline (`<adf>…</adf>`) tag formats are intentionally different and must stay that way — a bare inline tag gets wrapped in a `paragraph` by marked, whereas a block tag is inserted directly as a doc child (see `lib/test/adf-passthrough.test.ts`). The main change is replacing the table cell rendering logic with a `cellContentToMarkdown` helper that renders block-level cell content as inline `<adf>` tags (correct, since table cells are an inline context). Tests expand `adf-to-markdown.test.ts`.
+**Architecture:** The block (`<adf>\n…\n</adf>`) and inline (`<adf>…</adf>`) tag formats are intentionally different and must stay that way — a bare inline tag gets wrapped in a `paragraph` by marked, whereas a block tag is inserted directly as a doc child (see `lib/test/adf-passthrough.test.ts`). The main change is replacing the table cell rendering logic with a `cellContentToMarkdown` helper. Cell rendering rules: single paragraph → render inline; multiple paragraphs only → emit all as `<adf>[{...},{...}]</adf>` (array form preserves structure); mix of paragraph(s) and block node(s) → render paragraph inline content, wrap block nodes individually as `<adf>{...}</adf>`; `mediaSingle` → rendered as `![…](…)`. Tests expand `adf-to-markdown.test.ts` and add a new fixture.
 
 **Tech Stack:** TypeScript, AVA 6, `tsimp`, ESM modules. No new dependencies.
 
@@ -18,21 +18,94 @@
 |---|---|
 | `lib/index.ts` | Add `cellContentToMarkdown` helper; update table cell loop to use it |
 | `lib/test/adf-to-markdown.test.ts` | Add inline-`<adf>`-in-heading/list/cell tests; add triple-digit ordered list test |
+| `lib/test/fixtures/inline-adf-elements.json` | New fixture: unknown inline ADF nodes in headings, list items, and blockquotes |
 
 ---
 
 ## Task 1: Test inline `<adf>` tags in single-line Markdown elements
 
 **Files:**
+- Create: `lib/test/fixtures/inline-adf-elements.json`
 - Modify: `lib/test/adf-to-markdown.test.ts`
 
-These tests verify that an unknown inline node (which `adfToMarkdown` emits as `<adf>…</adf>`) embedded within headings, list items, blockquotes, and table cells survives a full ADF→MD→ADF round-trip. They also serve as regression tests for the inline-tag-in-block-context parsing path in `markdownToAdf`.
+These tests verify that an unknown inline node (which `adfToMarkdown` emits as `<adf>…</adf>`) embedded within headings, list items, and blockquotes survives a full ADF→MD→ADF round-trip. Unit tests cover the `adfToMarkdown` output format; the round-trip is covered via the `roundTripMacro` using a fixture.
 
-- [ ] **Step 1: Write the tests**
+- [ ] **Step 1: Create `lib/test/fixtures/inline-adf-elements.json`**
 
-Add to the unit tests section of `lib/test/adf-to-markdown.test.ts` (after the `"unknown inline node falls back to adf tag"` test, around line 587):
+```json
+{
+  "version": 1,
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": { "level": 2 },
+      "content": [
+        { "type": "text", "text": "Hello " },
+        { "type": "mention", "attrs": { "id": "u1", "text": "@Alice", "accessLevel": "" } }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                { "type": "text", "text": "Item " },
+                { "type": "status", "attrs": { "text": "Done", "color": "green" } }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "orderedList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                { "type": "text", "text": "Due " },
+                { "type": "date", "attrs": { "timestamp": "1704067200000" } }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "blockquote",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            { "type": "text", "text": "Congrats " },
+            { "type": "emoji", "attrs": { "shortName": ":tada:", "text": "🎉" } }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+- [ ] **Step 2: Write the unit tests**
+
+Add to the unit tests section of `lib/test/adf-to-markdown.test.ts` (after the `"unknown inline node falls back to adf tag"` test, around line 587), and add the fixture import at the top of the file alongside the other fixture imports:
 
 ```typescript
+// Add to imports at top of file:
+import inlineAdfElementsAdf from "./fixtures/inline-adf-elements.json" with { type: "json" };
+```
+
+```typescript
+// Add to unit tests section:
 test("unknown inline node in heading falls back to inline adf tag", (t) => {
   const mention = { type: "mention", attrs: { id: "u1", text: "@Alice", accessLevel: "" } };
   const result = adfToMarkdown({
@@ -42,10 +115,7 @@ test("unknown inline node in heading falls back to inline adf tag", (t) => {
       {
         type: "heading",
         attrs: { level: 2 },
-        content: [
-          { type: "text", text: "Hello " },
-          mention,
-        ],
+        content: [{ type: "text", text: "Hello " }, mention],
       },
     ],
   });
@@ -64,13 +134,7 @@ test("unknown inline node in bullet list item falls back to inline adf tag", (t)
           {
             type: "listItem",
             content: [
-              {
-                type: "paragraph",
-                content: [
-                  { type: "text", text: "Item " },
-                  status,
-                ],
-              },
+              { type: "paragraph", content: [{ type: "text", text: "Item " }, status] },
             ],
           },
         ],
@@ -92,13 +156,7 @@ test("unknown inline node in ordered list item falls back to inline adf tag", (t
           {
             type: "listItem",
             content: [
-              {
-                type: "paragraph",
-                content: [
-                  { type: "text", text: "Due " },
-                  date,
-                ],
-              },
+              { type: "paragraph", content: [{ type: "text", text: "Due " }, date] },
             ],
           },
         ],
@@ -117,71 +175,21 @@ test("unknown inline node in blockquote falls back to inline adf tag", (t) => {
       {
         type: "blockquote",
         content: [
-          {
-            type: "paragraph",
-            content: [
-              { type: "text", text: "Congrats " },
-              emoji,
-            ],
-          },
+          { type: "paragraph", content: [{ type: "text", text: "Congrats " }, emoji] },
         ],
       },
     ],
   });
   t.is(result, `> Congrats <adf>${JSON.stringify(emoji)}</adf>`);
 });
-
-test("round-trip: unknown inline node in heading", (t) => {
-  const mention = { type: "mention", attrs: { id: "u1", text: "@Alice", accessLevel: "" } };
-  const adf = {
-    version: 1 as const,
-    type: "doc" as const,
-    content: [
-      {
-        type: "heading",
-        attrs: { level: 2 },
-        content: [
-          { type: "text", text: "Hello " },
-          mention,
-        ],
-      },
-    ],
-  };
-  const md = adfToMarkdown(adf);
-  t.deepEqual(normalizeAdfForTesting(markdownToAdf(md)), normalizeAdfForTesting(adf));
-});
-
-test("round-trip: unknown inline node in bullet list item", (t) => {
-  const status = { type: "status", attrs: { text: "Done", color: "green" } };
-  const adf = {
-    version: 1 as const,
-    type: "doc" as const,
-    content: [
-      {
-        type: "bulletList",
-        content: [
-          {
-            type: "listItem",
-            content: [
-              {
-                type: "paragraph",
-                content: [
-                  { type: "text", text: "Item " },
-                  status,
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  };
-  const md = adfToMarkdown(adf);
-  t.deepEqual(normalizeAdfForTesting(markdownToAdf(md)), normalizeAdfForTesting(adf));
-});
 ```
 
-- [ ] **Step 2: Run the tests**
+```typescript
+// Add to round-trip section alongside the other roundTripMacro calls:
+test(roundTripMacro, inlineAdfElementsAdf, "inline-adf-elements");
+```
+
+- [ ] **Step 3: Run the unit tests**
 
 These exercise existing behaviour — inline nodes in headings/list items already go through `inlineNodesToMarkdown` which emits `<adf>…</adf>`. They should pass without code changes.
 
@@ -191,7 +199,15 @@ cd lib && npx ava test/adf-to-markdown.test.ts -- "unknown inline node in"
 
 Expected: all PASS. If any fail, investigate before continuing.
 
-- [ ] **Step 3: Run the full test suite**
+- [ ] **Step 4: Run the round-trip test**
+
+```bash
+cd lib && npx ava test/adf-to-markdown.test.ts -- "round-trip: inline-adf-elements"
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Run the full test suite**
 
 ```bash
 cd lib && npm test
@@ -199,10 +215,10 @@ cd lib && npm test
 
 Expected: all tests pass.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add lib/test/adf-to-markdown.test.ts
+git add lib/test/fixtures/inline-adf-elements.json lib/test/adf-to-markdown.test.ts
 git commit
 ```
 
@@ -214,16 +230,67 @@ git commit
 - Modify: `lib/index.ts` (add `cellContentToMarkdown` helper; update table case)
 - Modify: `lib/test/adf-to-markdown.test.ts`
 
-GFM table cells support inline content only. Cells with block-level nodes (bullet lists, code blocks, multiple paragraphs) cannot be represented natively. The fix: detect block-level content in a cell and emit each block node as an inline `<adf>` tag. This is correct because table cells are an inline context — the inline tag round-trips back through `markdownToAdf`'s `adf_inline` extension inside the cell's inline token stream.
+GFM table cells support inline content only. The fix: a new `cellContentToMarkdown` helper with these rules:
 
-A "simple" cell has a single paragraph — render via `inlineNodesToMarkdown`.
-A "complex" cell has any other structure — render paragraphs inline, `mediaSingle` as `![…](…)`, other block nodes as `<adf>…</adf>`.
+1. **Single paragraph** → render via `inlineNodesToMarkdown` (simple, lossless)
+2. **Multiple paragraphs only** → wrap all as `<adf>[{p1},{p2},...]</adf>` (array form preserves structure; joining inline would lose paragraph boundaries)
+3. **`mediaSingle`** (alone or with other nodes) → rendered as `![alt](url)` inline
+4. **Mix of paragraph(s) + block node(s)** → render each paragraph's inline content directly, wrap each block node individually as `<adf>{node}</adf>`; join all parts with a single space
+5. **Other block-only node** (single non-paragraph, non-mediaSingle) → wrap as `<adf>{node}</adf>`
+
+Note: cells with block nodes are intentionally rendered naively — a `heading` node in a cell becomes `<adf>{"type":"heading",...}</adf>` even though it could theoretically render as `## text`. Smarter handling is deferred to a future iteration.
 
 - [ ] **Step 1: Write the failing tests**
 
 Add to `lib/test/adf-to-markdown.test.ts`:
 
 ```typescript
+// --- Happy path: inline content in cells ---
+
+test("table cell with inline marks renders correctly", (t) => {
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "H" }] }] },
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [
+              {
+                type: "tableCell",
+                content: [
+                  {
+                    type: "paragraph",
+                    content: [
+                      { type: "text", text: "See ", marks: [{ type: "strong" }] },
+                      {
+                        type: "text",
+                        text: "image",
+                        marks: [{ type: "link", attrs: { href: "https://example.com" } }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  t.is(result, "| H |\n| --- |\n| **See** [image](https://example.com) |");
+});
+
+// --- Complex cells: block content fallback ---
+
 test("table cell with bullet list falls back to inline adf tag", (t) => {
   const list = {
     type: "bulletList",
@@ -247,9 +314,7 @@ test("table cell with bullet list falls back to inline adf tag", (t) => {
           },
           {
             type: "tableRow",
-            content: [
-              { type: "tableCell", content: [list] },
-            ],
+            content: [{ type: "tableCell", content: [list] }],
           },
         ],
       },
@@ -258,7 +323,9 @@ test("table cell with bullet list falls back to inline adf tag", (t) => {
   t.is(result, `| Col |\n| --- |\n| <adf>${JSON.stringify(list)}</adf> |`);
 });
 
-test("table cell with two paragraphs emits both inline separated by space", (t) => {
+test("table cell with two paragraphs wraps both in array adf tag", (t) => {
+  const p1 = { type: "paragraph", content: [{ type: "text", text: "First" }] };
+  const p2 = { type: "paragraph", content: [{ type: "text", text: "Second" }] };
   const result = adfToMarkdown({
     version: 1,
     type: "doc",
@@ -275,23 +342,17 @@ test("table cell with two paragraphs emits both inline separated by space", (t) 
           {
             type: "tableRow",
             content: [
-              {
-                type: "tableCell",
-                content: [
-                  { type: "paragraph", content: [{ type: "text", text: "First" }] },
-                  { type: "paragraph", content: [{ type: "text", text: "Second" }] },
-                ],
-              },
+              { type: "tableCell", content: [p1, p2] },
             ],
           },
         ],
       },
     ],
   });
-  t.is(result, "| H |\n| --- |\n| First Second |");
+  t.is(result, `| H |\n| --- |\n| <adf>${JSON.stringify([p1, p2])}</adf> |`);
 });
 
-test("table cell with mixed paragraph and block node emits paragraph inline and block as adf", (t) => {
+test("table cell with paragraph, block node, and paragraph renders surrounding text inline and block as adf", (t) => {
   const list = {
     type: "bulletList",
     content: [
@@ -319,6 +380,7 @@ test("table cell with mixed paragraph and block node emits paragraph inline and 
                 content: [
                   { type: "paragraph", content: [{ type: "text", text: "Note:" }] },
                   list,
+                  { type: "paragraph", content: [{ type: "text", text: "See above." }] },
                 ],
               },
             ],
@@ -327,17 +389,80 @@ test("table cell with mixed paragraph and block node emits paragraph inline and 
       },
     ],
   });
-  t.is(result, `| H |\n| --- |\n| Note: <adf>${JSON.stringify(list)}</adf> |`);
+  t.is(result, `| H |\n| --- |\n| Note: <adf>${JSON.stringify(list)}</adf> See above. |`);
+});
+
+// --- Naive block rendering: always uses <adf>, even for representable content ---
+
+test("table cell with heading node uses inline adf tag (naive fallback, not ## syntax)", (t) => {
+  const heading = {
+    type: "heading",
+    attrs: { level: 2 },
+    content: [{ type: "text", text: "Section" }],
+  };
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "H" }] }] },
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [{ type: "tableCell", content: [heading] }],
+          },
+        ],
+      },
+    ],
+  });
+  t.is(result, `| H |\n| --- |\n| <adf>${JSON.stringify(heading)}</adf> |`);
+});
+
+test("table cell with single-item bullet list uses inline adf tag (naive fallback, not list syntax)", (t) => {
+  const list = {
+    type: "bulletList",
+    content: [
+      { type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "only item" }] }] },
+    ],
+  };
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "H" }] }] },
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [{ type: "tableCell", content: [list] }],
+          },
+        ],
+      },
+    ],
+  });
+  t.is(result, `| H |\n| --- |\n| <adf>${JSON.stringify(list)}</adf> |`);
 });
 ```
 
-- [ ] **Step 2: Run the tests to confirm they fail**
+- [ ] **Step 2: Run the tests to confirm they fail (except the happy-path test)**
 
 ```bash
-cd lib && npx ava test/adf-to-markdown.test.ts -- "table cell with bullet list"
+cd lib && npx ava test/adf-to-markdown.test.ts -- "table cell"
 ```
 
-Expected: FAIL — current implementation collapses newlines in the multi-line block output, producing garbled content.
+Expected: the happy-path test (`"table cell with inline marks"`) PASSES. The complex/block tests FAIL.
 
 - [ ] **Step 3: Add `cellContentToMarkdown` helper in `lib/index.ts`**
 
@@ -347,11 +472,16 @@ Insert this function before `blockNodeToMarkdown` (around line 760):
 /**
  * Renders the content of a table cell to a Markdown-safe inline string.
  *
- * A "simple" cell (single paragraph) renders its inline content directly.
- * A "complex" cell (multiple block nodes, or non-paragraph block nodes)
- * renders paragraphs and mediaSingle nodes inline; other block nodes are
- * wrapped in inline <adf> tags (correct since table cells are an inline
- * context). All parts joined with a single space.
+ * Rules (in order):
+ * - Empty content → single space (GFM requires non-empty cells)
+ * - Single paragraph → inline content via inlineNodesToMarkdown (simple, lossless)
+ * - Multiple paragraphs only → <adf>[{p1},{p2},...}</adf> (array form preserves boundaries)
+ * - mediaSingle → ![alt](url) inline
+ * - Mix of paragraphs + block nodes → paragraphs rendered inline, block nodes as <adf>{node}</adf>
+ * - Single non-paragraph block node → <adf>{node}</adf>
+ *
+ * Block nodes in cells are handled naively — a heading node becomes <adf>{"type":"heading",...}</adf>
+ * even though it could theoretically be rendered as "## text". Smarter handling is deferred.
  */
 function cellContentToMarkdown(cellContent: AdfNode[]): string {
   if (cellContent.length === 0) return " ";
@@ -361,7 +491,13 @@ function cellContentToMarkdown(cellContent: AdfNode[]): string {
     return inlineNodesToMarkdown(cellContent[0]!.content) || " ";
   }
 
-  // Complex case: multiple block nodes, or non-paragraph single node.
+  // Multiple-paragraphs-only case: wrap all as a single array <adf> tag to
+  // preserve paragraph boundaries (joining inline would lose them).
+  if (cellContent.every((node) => node.type === "paragraph")) {
+    return `<adf>${JSON.stringify(cellContent)}</adf>`;
+  }
+
+  // Complex case: mix of paragraphs, mediaSingle, and/or block nodes.
   const parts = cellContent.map((node) => {
     if (node.type === "paragraph") {
       return inlineNodesToMarkdown(node.content);
@@ -408,9 +544,7 @@ const cellTexts = cells.map((cell) =>
 cd lib && npx ava test/adf-to-markdown.test.ts -- "table cell"
 ```
 
-Expected: all three new "table cell" tests PASS.
-
-Note: complex cells (bullet lists, multiple paragraphs) are intentionally lossy — `markdownToAdf` wraps the `<adf>` inline tags in a `paragraph` node rather than restoring the original cell structure. This is a documented limitation of the GFM table format.
+Expected: all tests PASS.
 
 - [ ] **Step 6: Run the full test suite**
 
