@@ -362,6 +362,24 @@ test("ordered list custom start", (t) => {
   t.is(result, "3. Item 1\n4. Item 2");
 });
 
+test("ordered list with triple-digit items (99 and 100)", (t) => {
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "orderedList",
+        attrs: { order: 99 },
+        content: [
+          { type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "Ninety-nine" }] }] },
+          { type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "One hundred" }] }] },
+        ],
+      },
+    ],
+  });
+  t.is(result, "99. Ninety-nine\n100. One hundred");
+});
+
 test("nested bullet list", (t) => {
   const result = adfToMarkdown({
     version: 1,
