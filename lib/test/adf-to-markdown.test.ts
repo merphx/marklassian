@@ -25,6 +25,7 @@ import gfmNestedTaskListAdf from "./fixtures/gfm-nested-task-list.json" with {
 import adfPassthroughAdf from "./fixtures/adf-passthrough.json" with {
   type: "json",
 };
+import inlineAdfElementsAdf from "./fixtures/inline-adf-elements.json" with { type: "json" };
 
 const test = anyTest as unknown as TestFn<void>;
 
@@ -599,6 +600,83 @@ test("unknown inline node falls back to adf tag", (t) => {
   t.is(result, `<adf>${JSON.stringify(unknownNode)}</adf>`);
 });
 
+test("unknown inline node in heading falls back to inline adf tag", (t) => {
+  const mention = { type: "mention", attrs: { id: "u1", text: "@Alice", accessLevel: "" } };
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "heading",
+        attrs: { level: 2 },
+        content: [{ type: "text", text: "Hello " }, mention],
+      },
+    ],
+  });
+  t.is(result, `## Hello <adf>${JSON.stringify(mention)}</adf>`);
+});
+
+test("unknown inline node in bullet list item falls back to inline adf tag", (t) => {
+  const status = { type: "status", attrs: { text: "Done", color: "green" } };
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "bulletList",
+        content: [
+          {
+            type: "listItem",
+            content: [
+              { type: "paragraph", content: [{ type: "text", text: "Item " }, status] },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  t.is(result, `- Item <adf>${JSON.stringify(status)}</adf>`);
+});
+
+test("unknown inline node in ordered list item falls back to inline adf tag", (t) => {
+  const date = { type: "date", attrs: { timestamp: "1704067200000" } };
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "orderedList",
+        content: [
+          {
+            type: "listItem",
+            content: [
+              { type: "paragraph", content: [{ type: "text", text: "Due " }, date] },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  t.is(result, `1. Due <adf>${JSON.stringify(date)}</adf>`);
+});
+
+test("unknown inline node in blockquote falls back to inline adf tag", (t) => {
+  const emoji = { type: "emoji", attrs: { shortName: ":tada:", text: "🎉" } };
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "blockquote",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Congrats " }, emoji] },
+        ],
+      },
+    ],
+  });
+  t.is(result, `> Congrats <adf>${JSON.stringify(emoji)}</adf>`);
+});
+
 test("accepts AdfDocument directly", (t) => {
   const result = adfToMarkdown({
     version: 1,
@@ -877,3 +955,4 @@ test(roundTripMacro, textEdgeCasesAdf, "text-edge-cases");
 test(roundTripMacro, gfmTaskListAdf, "gfm-task-list");
 test(roundTripMacro, gfmNestedTaskListAdf, "gfm-nested-task-list");
 test(roundTripMacro, adfPassthroughAdf, "adf-passthrough");
+test(roundTripMacro, inlineAdfElementsAdf, "inline-adf-elements");

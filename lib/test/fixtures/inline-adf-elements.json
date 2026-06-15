@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": { "level": 2 },
+      "content": [
+        { "type": "text", "text": "Hello " },
+        { "type": "mention", "attrs": { "id": "u1", "text": "@Alice", "accessLevel": "" } }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                { "type": "text", "text": "Item " },
+                { "type": "status", "attrs": { "text": "Done", "color": "green" } }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "orderedList",
+      "attrs": { "order": 1 },
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                { "type": "text", "text": "Due " },
+                { "type": "date", "attrs": { "timestamp": "1704067200000" } }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "blockquote",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            { "type": "text", "text": "Congrats " },
+            { "type": "emoji", "attrs": { "shortName": ":tada:", "text": "🎉" } }
+          ]
+        }
+      ]
+    }
+  ]
+}
