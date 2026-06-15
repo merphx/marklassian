@@ -755,6 +755,55 @@ function blockNodesToMarkdown(nodes: AdfNode[], indent = 0): string {
 }
 
 /**
+ * Renders the content of a table cell to a Markdown-safe inline string.
+ *
+ * Rules (in order):
+ * - Empty content → single space (GFM requires non-empty cells)
+ * - Single paragraph → inline content via inlineNodesToMarkdown (simple, lossless)
+ * - Multiple paragraphs only → <adf>[{p1},{p2},...}</adf> (array form preserves boundaries)
+ * - mediaSingle → ![alt](url) inline
+ * - Mix of paragraphs + block nodes → paragraphs rendered inline, block nodes as <adf>{node}</adf>
+ * - Single non-paragraph block node → <adf>{node}</adf>
+ *
+ * Block nodes in cells are handled naively — a heading node becomes <adf>{"type":"heading",...}</adf>
+ * even though it could theoretically be rendered as "## text". Smarter handling is deferred.
+ */
+function cellContentToMarkdown(cellContent: AdfNode[]): string {
+  if (cellContent.length === 0) return " ";
+
+  // Simple case: single paragraph — render inline content directly.
+  if (cellContent.length === 1 && cellContent[0]!.type === "paragraph") {
+    return inlineNodesToMarkdown(cellContent[0]!.content) || " ";
+  }
+
+  // Multiple-paragraphs-only case: wrap all as a single array <adf> tag to
+  // preserve paragraph boundaries (joining inline would lose them).
+  if (cellContent.every((node) => node.type === "paragraph")) {
+    return `<adf>${JSON.stringify(cellContent)}</adf>`;
+  }
+
+  // Complex case: mix of paragraphs, mediaSingle, and/or block nodes.
+  const parts = cellContent.map((node) => {
+    if (node.type === "paragraph") {
+      return inlineNodesToMarkdown(node.content);
+    }
+    if (node.type === "mediaSingle") {
+      // Render the image inline so it survives the cell's single-line constraint.
+      const media = (node.content ?? []).find((c) => c.type === "media");
+      if (media) {
+        return `![${media.attrs?.alt ?? ""}](${media.attrs?.url ?? ""})`;
+      }
+      return "";
+    }
+    // Block-level node that can't be inlined — emit as inline <adf> tag.
+    // Table cells are an inline context, so the inline form is correct here.
+    return `<adf>${JSON.stringify(node)}</adf>`;
+  });
+
+  return parts.filter(Boolean).join(" ") || " ";
+}
+
+/**
  * Converts a single block ADF node to a Markdown string. Unknown node types
  * fall back to an <adf> passthrough block.
  */
@@ -830,12 +879,9 @@ function blockNodeToMarkdown(node: AdfNode, indent = 0): string {
         const cells = row.content ?? [];
         const isHeaderRow =
           cells.length > 0 && cells[0]?.type === "tableHeader";
-        const cellTexts = cells.map((cell) => {
-          const content = blockNodesToMarkdown(cell.content ?? [])
-            .replace(/\n+/g, " ")
-            .trim();
-          return content || " ";
-        });
+        const cellTexts = cells.map((cell) =>
+          cellContentToMarkdown(cell.content ?? [])
+        );
         output.push(`| ${cellTexts.join(" | ")} |`);
         if (isHeaderRow && !separatorEmitted) {
           output.push(`| ${cells.map(() => "---").join(" | ")} |`);

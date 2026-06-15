@@ -917,6 +917,220 @@ test("marked text — asterisks inline in single node (from Confluence)", (t) =>
 });
 
 // ---------------------------------------------------------------------------
+// Table cell content rendering
+// ---------------------------------------------------------------------------
+
+// --- Happy path: inline content in cells ---
+
+test("table cell with inline marks renders correctly", (t) => {
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "H" }] }] },
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [
+              {
+                type: "tableCell",
+                content: [
+                  {
+                    type: "paragraph",
+                    content: [
+                      { type: "text", text: "See ", marks: [{ type: "strong" }] },
+                      {
+                        type: "text",
+                        text: "image",
+                        marks: [{ type: "link", attrs: { href: "https://example.com" } }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  t.is(result, "| H |\n| --- |\n| **See **[image](https://example.com) |");
+});
+
+// --- Complex cells: block content fallback ---
+
+test("table cell with bullet list falls back to inline adf tag", (t) => {
+  const list = {
+    type: "bulletList",
+    content: [
+      { type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "a" }] }] },
+      { type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "b" }] }] },
+    ],
+  };
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "Col" }] }] },
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [{ type: "tableCell", content: [list] }],
+          },
+        ],
+      },
+    ],
+  });
+  t.is(result, `| Col |\n| --- |\n| <adf>${JSON.stringify(list)}</adf> |`);
+});
+
+test("table cell with two paragraphs wraps both in array adf tag", (t) => {
+  const p1 = { type: "paragraph", content: [{ type: "text", text: "First" }] };
+  const p2 = { type: "paragraph", content: [{ type: "text", text: "Second" }] };
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "H" }] }] },
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableCell", content: [p1, p2] },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  t.is(result, `| H |\n| --- |\n| <adf>${JSON.stringify([p1, p2])}</adf> |`);
+});
+
+test("table cell with paragraph, block node, and paragraph renders surrounding text inline and block as adf", (t) => {
+  const list = {
+    type: "bulletList",
+    content: [
+      { type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "item" }] }] },
+    ],
+  };
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "H" }] }] },
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [
+              {
+                type: "tableCell",
+                content: [
+                  { type: "paragraph", content: [{ type: "text", text: "Note:" }] },
+                  list,
+                  { type: "paragraph", content: [{ type: "text", text: "See above." }] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  t.is(result, `| H |\n| --- |\n| Note: <adf>${JSON.stringify(list)}</adf> See above. |`);
+});
+
+// --- Naive block rendering: always uses <adf>, even for representable content ---
+
+test("table cell with heading node uses inline adf tag (naive fallback, not ## syntax)", (t) => {
+  const heading = {
+    type: "heading",
+    attrs: { level: 2 },
+    content: [{ type: "text", text: "Section" }],
+  };
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "H" }] }] },
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [{ type: "tableCell", content: [heading] }],
+          },
+        ],
+      },
+    ],
+  });
+  t.is(result, `| H |\n| --- |\n| <adf>${JSON.stringify(heading)}</adf> |`);
+});
+
+test("table cell with single-item bullet list uses inline adf tag (naive fallback, not list syntax)", (t) => {
+  const list = {
+    type: "bulletList",
+    content: [
+      { type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "only item" }] }] },
+    ],
+  };
+  const result = adfToMarkdown({
+    version: 1,
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableHeader", content: [{ type: "paragraph", content: [{ type: "text", text: "H" }] }] },
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [{ type: "tableCell", content: [list] }],
+          },
+        ],
+      },
+    ],
+  });
+  t.is(result, `| H |\n| --- |\n| <adf>${JSON.stringify(list)}</adf> |`);
+});
+
+// ---------------------------------------------------------------------------
 // Section 2: Round-trip tests
 // ---------------------------------------------------------------------------
 
