@@ -1,5 +1,6 @@
 import anyTest, { type TestFn } from "ava";
 import { markdownToAdf } from "../index";
+import { normalizeAdfForTesting } from "./test-helpers.js";
 
 import taskListAdf from "./fixtures/gfm-task-list.json" with { type: "json" };
 import nestedTaskListAdf from "./fixtures/gfm-nested-task-list.json" with {
@@ -7,33 +8,6 @@ import nestedTaskListAdf from "./fixtures/gfm-nested-task-list.json" with {
 };
 
 const test = anyTest as unknown as TestFn<void>;
-
-// Helper function to normalize UUIDs for testing
-function normalizeAdfForTesting(adf: any): any {
-  const normalized = JSON.parse(JSON.stringify(adf));
-  let taskListCounter = 0;
-  let taskItemCounter = 0;
-
-  function traverse(node: any) {
-    if (node.type === "taskList" && node.attrs?.localId) {
-      node.attrs.localId = `test-task-list-id${taskListCounter > 0 ? `-${taskListCounter}` : ""}`;
-      taskListCounter++;
-    }
-    if (node.type === "taskItem" && node.attrs?.localId) {
-      taskItemCounter++;
-      node.attrs.localId = `test-task-item-id-${taskItemCounter}`;
-    }
-    if (node.content && Array.isArray(node.content)) {
-      node.content.forEach(traverse);
-    }
-  }
-
-  if (normalized.content) {
-    normalized.content.forEach(traverse);
-  }
-
-  return normalized;
-}
 
 test(`Can convert GFM task lists`, async (t) => {
   const markdown = `- [ ] Foo bar
